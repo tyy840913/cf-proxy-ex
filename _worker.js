@@ -5,6 +5,7 @@ addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request))
 })
 
+
 const str = "/";
 const lastVisitProxyCookie = "__PROXY_VISITEDSITE__";
 const passwordCookieName = "__PROXY_PWD__";
@@ -20,18 +21,17 @@ const proxyHintInjection = `
 
 setTimeout(() => {
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    var hint = \`Warning: You are currently using a web proxy, the original link is \${window.location.pathname}. Please note that you are using a proxy, and do not log in to any website. Click to close this hint. 警告：您当前正在使用网络代理，原始链接为\${window.location.pathname}。请注意您正在使用代理，请勿登录任何网站。单击关闭此提示。\`;
-    console.log(1);
+    var hint = \`Warning: You are currently using a web proxy, the original link is \${window.location.pathname.substring(1)} . Please note that you are using a proxy, and do not log in to any website. Click to close this hint. <br>警告：您当前正在使用网络代理，原始链接为 \${window.location.pathname.substring(1)} 。请注意您正在使用代理，请勿登录任何网站。单击关闭此提示。\`;
     document.body.insertAdjacentHTML(
       'afterbegin', 
-      \`<div style="position:fixed;left:0px;top:0px;width:100%;margin:0px;padding:0px;z-index:9999999999999999999;user-select:none;cursor:pointer;" id="__PROXY_HINT_DIV__" onclick="document.getElementById('__PROXY_HINT_DIV__').remove();">
-        <span style="position:absolute;width:100%;min-height:30px;font-size:20px;color:yellow;background:red;text-align:center;border-radius:5px;">
+      \`<div style="position:fixed;left:0px;top:0px;width:100%;margin:0px;padding:0px;display:block;z-index:99999999999999999999999;user-select:none;cursor:pointer;" id="__PROXY_HINT_DIV__" onclick="document.getElementById('__PROXY_HINT_DIV__').remove();">
+        <span style="position:absolute;width:calc(100% - 20px);min-height:30px;font-size:18px;color:yellow;background:rgb(180,0,0);text-align:center;border-radius:5px;padding-left:10px;padding-right:10px;padding-top:1px;padding-bottom:1px;">
           \${hint}
         </span>
-      </div>\`    
+      </div>\`
     );
   }else{
-    alert(\`Warning: You are currently using a web proxy, the original link is \${window.location.pathname}. Please note that you are using a proxy, and do not log in to any website.\`);
+    alert(hint);
   }
 }, 3000);
 
@@ -40,19 +40,19 @@ const httpRequestInjection = `
 
 //---***========================================***---information---***========================================***---
 var now = new URL(window.location.href);
-var base = now.host;
-var protocol = now.protocol;
-var nowlink = protocol + "//" + base + "/";
-var oriUrlStr = window.location.href.substring(nowlink.length);
+var base = now.host; //代理的base - proxy.com
+var protocol = now.protocol; //代理的protocol
+var nowlink = protocol + "//" + base + "/"; //代理前缀 https://proxy.com/
+var oriUrlStr = window.location.href.substring(nowlink.length); //如：https://example.com/1?q#1
 var oriUrl = new URL(oriUrlStr);
 
 var path = now.pathname.substring(1);
-console.log("***************************----" + path);
+//console.log("***************************----" + path);
 if(!path.startsWith("http")) path = "https://" + path;
 
-var original_host = path.substring(path.indexOf("://") + "://".length);
+var original_host = oriUrlStr.substring(oriUrlStr.indexOf("://") + "://".length);
 original_host = original_host.split('/')[0];
-var mainOnly = path.substring(0, path.indexOf("://")) + "://" + original_host + "/";
+var mainOnly = oriUrlStr.substring(0, oriUrlStr.indexOf("://")) + "://" + original_host + "/";
 
 
 //---***========================================***---通用func---***========================================***---
@@ -71,7 +71,7 @@ function changeURL(relativePath){
     //ignore
   }
   try {
-    var absolutePath = new URL(relativePath, path).href;
+    var absolutePath = new URL(relativePath, oriUrlStr).href;
     absolutePath = absolutePath.replace(window.location.href, path);
     absolutePath = absolutePath.replace(encodeURI(window.location.href), path);
     absolutePath = absolutePath.replace(encodeURIComponent(window.location.href), path);
@@ -90,7 +90,7 @@ function changeURL(relativePath){
     absolutePath = nowlink + absolutePath;
     return absolutePath;
   } catch (e) {
-    console.log("Exception occured: " + e.message + path + "   " + relativePath);
+    console.log("Exception occured: " + e.message + oriUrlStr + "   " + relativePath);
     return "";
   }
 }
@@ -370,7 +370,8 @@ function historyInject(){
     if(!url) return; //x.com 会有一次undefined
 
 
-    if(url.startsWith("/" + oriUrl)) url = url.substring(("/" + oriUrl).length);
+    if(url.startsWith("/" + oriUrl.href)) url = url.substring(("/" + oriUrl.href).length); // https://example.com/
+    if(url.startsWith("/" + oriUrl.href.substring(0, oriUrl.href.length - 1))) url = url.substring(("/" + oriUrl.href).length - 1); // https://example.com (没有/在最后)
 
     
     var u = changeURL(url);
@@ -384,10 +385,11 @@ function historyInject(){
     //这是给duckduckgo专门的补丁，可能是window.location字样做了加密，导致服务器无法替换。
     //正常链接它要设置的history是/，改为proxy之后变为/https://duckduckgo.com。
     //但是这种解决方案并没有从“根源”上解决问题
-    //console.log("History url standard: " + url);
-    //console.log("History url compare" + "/" + oriUrl);
-    if(url.startsWith("/" + oriUrl)) url = url.substring(("/" + oriUrl).length);
 
+    if(url.startsWith("/" + oriUrl.href)) url = url.substring(("/" + oriUrl.href).length); // https://example.com/
+    if(url.startsWith("/" + oriUrl.href.substring(0, oriUrl.href.length - 1))) url = url.substring(("/" + oriUrl.href).length - 1); // https://example.com (没有/在最后)
+    //console.log("History url standard: " + url);
+    //console.log("History url changed: " + changeURL(url));
 
     var u = changeURL(url);
     return originalReplaceState.apply(this, [state, title, u]);
@@ -647,7 +649,7 @@ const mainPage = `
         <br><br>
         <a href="https://v2rayn.org/">v2RayN</a><span> is a GUI client for Windows, support Xray core and v2fly core and others. You must subscribe to an <a href = "https://aijichang.org/6190/">airport</a> to use it. For example, you can subscribe <a href="https://feiniaoyun.xyz/">fly bird cloud</a>.</span>
         <br><br>
-        <span>Bypass <del>Goguardian</del> by proxy: You can buy a domain($1) and setup by yourself: </span><a href="https://github.com/gaboolic/cloudflare-reverse-proxy">how to setup a proxy</a><span>. Unless <del>Goguardian</del> use white list mode, this can always work.</span>
+        <span>Bypass <del>Goguardian</del> by proxy: You can buy a domain($1) and setup by yourself: </span><a href="https://github.com/1234567Yang/cf-proxy-ex/blob/main/deploy_on_deno_tutorial.md">how to setup a proxy</a><span>. Unless <del>Goguardian</del> use white list mode, this can always work.</span>
         <br>
         <span>Too expensive? Never mind! There are a lot of free domains registration companies (for the first year of the domain) that do not need any credit card, search online!</span>
         <br><br>
@@ -824,8 +826,11 @@ Allow: /$
   var modifiedResponse;
   var bd;
   var hasProxyHintCook = (getCook(proxyHintCookieName, siteCookie) != "");
-
   const contentType = response.headers.get("Content-Type");
+
+
+
+  if (response.body) {
   if (contentType && contentType.startsWith("text/")) {
     bd = await response.text();
 
@@ -839,7 +844,7 @@ Allow: /$
       }
     });
 
-    console.log(bd); // 输出替换后的文本
+    // console.log(bd); // 输出替换后的文本
 
     if (contentType && (contentType.includes("text/html") || contentType.includes("text/javascript"))){
       bd = bd.replace("window.location", "window." + replaceUrlObj);
@@ -870,15 +875,20 @@ Allow: /$
     // }
     //console.log(bd);
 
+    // try{
     modifiedResponse = new Response(bd, response);
+    // }catch{
+    //     console.log(response.status);
+    // }
   } else {
     //var blob = await response.blob();
     //modifiedResponse = new Response(blob, response);
     //会导致大文件无法代理memory out
     modifiedResponse = new Response(response.body, response);
   }
-
-
+  }else{
+      modifiedResponse = new Response(response);
+  }
 
 
   let headers = modifiedResponse.headers;
@@ -938,7 +948,7 @@ Allow: /$
     //origin: "https://www.baidu.com"
     headers.append("Set-Cookie", cookieValue);
     
-    if(!hasProxyHintCook){
+    if(response.body && !hasProxyHintCook){ //response.body 确保是正常网页再设置cookie
       //添加代理提示
       const expiryDate = new Date();
       expiryDate.setTime(expiryDate.getTime() + 24 * 60 * 60 * 1000); // 24小时
