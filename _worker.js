@@ -577,8 +577,8 @@ console.log("WINDOW CORS ERROR EVENT ADDED");
 
 
 `;
-httpRequestInjection = 
-`(function () {`
+httpRequestInjection =
+  `(function () {`
   + httpRequestInjection +
   `})();`;
 const mainPage = `
@@ -736,7 +736,7 @@ async function handleRequest(request) {
 
   const url = new URL(request.url);
   if (request.url.endsWith("favicon.ico")) {
-    return Response.redirect("https://www.baidu.com/favicon.ico", 301);
+    return getRedirect("https://www.baidu.com/favicon.ico");
   }
   if (request.url.endsWith("robots.txt")) {
     return new Response(`User-Agent: *
@@ -744,7 +744,7 @@ async function handleRequest(request) {
       headers: { "Content-Type": "text/plain" },
     });
   }
-  
+
   //var siteOnly = url.pathname.substring(url.pathname.indexOf(str) + str.length);
 
   var actualUrlStr = url.pathname.substring(url.pathname.indexOf(str) + str.length) + url.search + url.hash;
@@ -771,7 +771,7 @@ async function handleRequest(request) {
       if (lastVisit != null && lastVisit != "") {
         //(!lastVisit.startsWith("http"))?"https://":"" + 
         //现在的actualUrlStr如果本来不带https:// 的话那么现在也不带，因为判断是否带protocol在后面
-        return Response.redirect(thisProxyServerUrlHttps + lastVisit + "/" + actualUrlStr, 301);
+        return getRedirect(thisProxyServerUrlHttps + lastVisit + "/" + actualUrlStr);
       }
     }
     return getHTMLResponse("Something is wrong while trying to get your cookie: <br> siteCookie: " + siteCookie + "<br>" + "lastSite: " + lastVisit);
@@ -780,10 +780,42 @@ async function handleRequest(request) {
 
   if (!actualUrlStr.startsWith("http") && !actualUrlStr.includes("://")) { //从www.xxx.com转到https://www.xxx.com
     //actualUrlStr = "https://" + actualUrlStr;
-    return Response.redirect(thisProxyServerUrlHttps + "https://" + actualUrlStr, 301);
+    return getRedirect(thisProxyServerUrlHttps + "https://" + actualUrlStr);
   }
+
   //if(!actualUrlStr.endsWith("/")) actualUrlStr += "/";
   const actualUrl = new URL(actualUrlStr);
+
+
+
+
+
+  //check for upper case: proxy.com/https://ABCabc.dev
+  {
+    var checkHostCase = actualUrlStr.substring(actualUrlStr.indexOf("://") + 3);
+
+    var pos1 = checkHostCase.indexOf("\\");
+    var pos2 = checkHostCase.indexOf("/");
+    var finalPos;
+    if (pos1 === -1 && pos2 === -1) {
+      finalPos = -1; // 都没有找到
+    } else if (pos1 === -1) {
+      finalPos = pos2;
+    } else if (pos2 === -1) {
+      finalPos = pos1;
+    } else {
+      finalPos = Math.min(pos1, pos2);
+    }
+
+
+    checkHostCase = checkHostCase.substring(0, (finalPos != -1) ? finalPos : checkHostCase.length);
+
+    if (checkHostCase.toLowerCase() != checkHostCase) {
+      //actualUrl.href 会自动转换host为小写
+      return getRedirect(thisProxyServerUrlHttps + actualUrl.href);
+    }
+  }
+
 
   let clientHeaderWithChange = new Headers();
   //***代理发送数据的Header：修改部分header防止403 forbidden，要先修改，   因为添加Request之后header是只读的（***ChatGPT，未测试）
@@ -819,7 +851,7 @@ async function handleRequest(request) {
   if (response.status.toString().startsWith("3") && response.headers.get("Location") != null) {
     //console.log(base_url + response.headers.get("Location"))
     try {
-      return Response.redirect(thisProxyServerUrlHttps + new URL(response.headers.get("Location"), actualUrlStr).href, 301);
+      return getRedirect(thisProxyServerUrlHttps + new URL(response.headers.get("Location"), actualUrlStr).href);
     } catch {
       getHTMLResponse(redirectError + "<br>the redirect url:" + response.headers.get("Location") + ";the url you are now at:" + actualUrlStr);
     }
@@ -1096,4 +1128,18 @@ function getHTMLResponse(html) {
       "Content-Type": "text/html; charset=utf-8"
     }
   });
+}
+
+function getRedirect(url){
+  return Response.redirect(url, 301);
+}
+
+// https://stackoverflow.com/questions/14480345/how-to-get-the-nth-occurrence-in-a-string
+function nthIndex(str, pat, n) {
+  var L = str.length, i = -1;
+  while (n-- && i++ < L) {
+    i = str.indexOf(pat, i);
+    if (i < 0) break;
+  }
+  return i;
 }
